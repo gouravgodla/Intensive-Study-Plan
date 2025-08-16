@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Intensive Study Plan Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Chosen Palette: "Notion Inspired" - A minimalist palette using off-white, grays, and subtle accents to create a clean, focused workspace. -->
+    <!-- Application Structure Plan: The application is structured into four main, navigable sections. The tracker section is powered by a backend API, featuring a daily checklist and a filterable topic database with full CRUD functionality for both topics and categories (subjects). Schedules are also editable and fetched from the database. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Subjects/Categories -> Goal: Organize/Manage -> Viz/Method: Management Modal -> Interaction: Add/Delete subjects, which dynamically updates all related UI components (filters, dropdowns, chart).
+        - Report Info: Daily Tasks -> Goal: Organize/Track -> Viz/Method: Interactive Checklist (HTML/JS/API) -> Interaction: Click to toggle completion status or delete tasks.
+        - Report Info: Study Topics -> Goal: Organize/Filter/Add/Delete -> Viz/Method: Filterable card grid -> Interaction: Add/delete/update topics, with categories populated dynamically.
+        - Report Info: Schedules -> Goal: Inform/Edit -> Viz/Method: Dynamically rendered blocks with an edit modal -> Interaction: "Edit" button opens a form to modify schedule details, which then re-renders the UI.
+        - Library/Method: Chart.js for the doughnut chart, Vanilla JS for UI logic and API communication.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f7f7f5;
+        color: #37352f;
+      }
+      .nav-link {
+        transition: all 0.2s ease;
+        border-radius: 4px;
+      }
+      .nav-link.active {
+        background-color: #e9e9e7;
+      }
+      .nav-link:hover:not(.active) {
+        background-color: #f1f1ef;
+      }
+      .content-section {
+        display: none;
+      }
+      .content-section.active {
+        display: block;
+      }
+      .chart-container {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+        height: auto;
+        max-height: 400px;
+      }
+      .notion-block {
+        background-color: #ffffff;
+        border: 1px solid #e2e2df;
+        border-radius: 8px;
+        transition: background-color 0.2s ease;
+      }
+      .notion-block:hover {
+        background-color: #fafafa;
+      }
+      .time-block {
+        border-left: 3px solid;
+      }
+      .dsa-border {
+        border-color: #3b82f6;
+      }
+      .aptitude-border {
+        border-color: #10b981;
+      }
+      .dev-border {
+        border-color: #f59e0b;
+      }
+      .class-border {
+        border-color: #6b7280;
+      }
+      .personal-border {
+        border-color: #ef4444;
+      }
+
+      .callout-block {
+        border-radius: 6px;
+        padding: 16px;
+        display: flex;
+        align-items: flex-start;
+      }
+      .callout-block .icon {
+        margin-right: 12px;
+        font-size: 1.25rem;
+      }
+      .callout-default {
+        background-color: #f1f1ef;
+      }
+      .callout-danger {
+        background-color: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+      }
+      .checklist-item {
+        display: flex;
+        align-items: center;
+        padding: 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+      }
+      .checklist-item:hover {
+        background-color: #f1f1ef;
+      }
+      .checklist-item input {
+        margin-right: 12px;
+      }
+      .checklist-item label.completed {
+        text-decoration: line-through;
+        color: #a5a29a;
+      }
+      .topic-card {
+        transition: all 0.3s ease;
+      }
+      .status-select {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        background-color: transparent;
+        border: none;
+        padding: 4px 8px;
+        font-size: 0.875rem;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .status-not-started {
+        background-color: #f1f1ef;
+        color: #37352f;
+      }
+      .status-in-progress {
+        background-color: rgba(59, 130, 246, 0.2);
+        color: #2563eb;
+      }
+      .status-completed {
+        background-color: rgba(16, 185, 129, 0.2);
+        color: #059669;
+      }
+      .delete-btn {
+        background: none;
+        border: none;
+        color: #a5a29a;
+        cursor: pointer;
+        font-size: 1.2rem;
+        line-height: 1;
+        padding: 0 4px;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .checklist-item:hover .delete-btn,
+      .topic-card:hover .delete-btn,
+      .category-item:hover .delete-btn {
+        opacity: 1;
+      }
+      .delete-btn:hover {
+        color: #ef4444;
+      }
+      .modal {
+        transition: opacity 0.3s ease;
+      }
+    </style>
+  </head>
+  <body class="antialiased">
+    <div
+      id="error-modal"
+      class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center hidden z-50"
+    >
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm mx-auto">
+        <h3 class="text-2xl font-bold text-red-600 mb-4">Connection Error</h3>
+        <p class="text-gray-700 mb-4">
+          Could not connect to the backend server. This is usually because the
+          server is not running.
+        </p>
+        <p class="text-sm text-gray-500">
+          To fix this, open a new terminal in VS Code, navigate to your `server`
+          directory, and run the command:
+          <code class="bg-gray-200 p-1 rounded">node server.js</code>
+        </p>
+        <button
+          id="close-error-modal-btn"
+          class="mt-6 w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="edit-schedule-modal"
+      class="modal fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center hidden z-40"
+    >
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-auto">
+        <h3 id="edit-modal-title" class="text-2xl font-bold mb-4">
+          Edit Schedule
+        </h3>
+        <div
+          id="edit-schedule-form-container"
+          class="space-y-3 max-h-96 overflow-y-auto"
+        ></div>
+        <div class="flex justify-end space-x-3 mt-6">
+          <button
+            id="cancel-edit-btn"
+            class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-md hover:bg-gray-300"
+          >
+            Cancel
+          </button>
+          <button
+            id="save-schedule-btn"
+            class="py-2 px-4 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="manage-categories-modal"
+      class="modal fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center hidden z-40"
+    >
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-auto">
+        <h3 class="text-2xl font-bold mb-4">Manage Subjects</h3>
+        <form id="add-category-form" class="flex gap-2 mb-4">
+          <input
+            type="text"
+            id="new-category-name"
+            placeholder="New subject name..."
+            class="flex-grow p-2 border bg-gray-50 rounded-md text-sm"
+          />
+          <button
+            type="submit"
+            class="py-2 px-4 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 text-sm"
+          >
+            Add
+          </button>
+        </form>
+        <div
+          id="category-list-container"
+          class="space-y-2 max-h-60 overflow-y-auto"
+        ></div>
+        <div class="flex justify-end mt-6">
+          <button
+            id="close-categories-btn"
+            class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-md hover:bg-gray-300"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-5xl">
+      <header class="text-left mb-10">
+        <h1 class="text-4xl font-bold">🗓️ Intensive Study Plan</h1>
+        <p class="mt-2 text-lg text-gray-500">
+          Your interactive dashboard for maximizing productivity.
+        </p>
+      </header>
+
+      <nav
+        class="flex flex-wrap justify-start space-x-2 border-b border-gray-200 mb-10"
+      >
+        <button
+          class="nav-link active py-2 px-4 text-md font-medium"
+          data-target="schedules"
+        >
+          Schedules
+        </button>
+        <button
+          class="nav-link py-2 px-4 text-md font-medium"
+          data-target="breakdown"
+        >
+          Breakdown
+        </button>
+        <button
+          class="nav-link py-2 px-4 text-md font-medium"
+          data-target="tracker"
+        >
+          Task Tracker
+        </button>
+        <button
+          class="nav-link py-2 px-4 text-md font-medium"
+          data-target="strategies"
+        >
+          Strategies
+        </button>
+      </nav>
+
+      <main>
+        <section id="schedules" class="content-section active">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="space-y-4">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-semibold">Weekday (Mon-Fri)</h3>
+                <button
+                  class="edit-schedule-btn text-sm py-1 px-3 bg-gray-200 rounded-md hover:bg-gray-300"
+                  data-schedule="weekday"
+                >
+                  Edit
+                </button>
+              </div>
+              <div
+                class="notion-block p-4 space-y-3"
+                id="weekday-schedule-container"
+              ></div>
+            </div>
+            <div class="space-y-4">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-semibold">Weekend (Sat-Sun)</h3>
+                <button
+                  class="edit-schedule-btn text-sm py-1 px-3 bg-gray-200 rounded-md hover:bg-gray-300"
+                  data-schedule="weekend"
+                >
+                  Edit
+                </button>
+              </div>
+              <div
+                class="notion-block p-4 space-y-3"
+                id="weekend-schedule-container"
+              ></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="breakdown" class="content-section">
+          <div class="notion-block p-6 max-w-2xl mx-auto">
+            <h3 class="text-2xl font-semibold text-center mb-4">
+              Weekly Breakdown
+            </h3>
+            <p class="text-center text-gray-500 mb-6">
+              This chart shows the number of topics per subject. Hover for
+              details.
+            </p>
+            <div class="chart-container">
+              <canvas id="studyHoursChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <section id="tracker" class="content-section">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-1">
+              <h3 class="text-2xl font-semibold mb-4">Daily Checklist</h3>
+              <div class="notion-block p-4 space-y-2">
+                <div id="checklist-container"></div>
+                <button
+                  id="reset-checklist"
+                  class="w-full text-center text-sm py-2 px-4 bg-gray-100 hover:bg-gray-200 rounded mt-2"
+                >
+                  Reset Daily Tasks
+                </button>
+              </div>
+            </div>
+            <div class="lg:col-span-2">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-semibold">Topic Database</h3>
+                <button
+                  id="manage-categories-btn"
+                  class="text-sm py-1 px-3 bg-gray-200 rounded-md hover:bg-gray-300"
+                >
+                  Manage Subjects
+                </button>
+              </div>
+              <div class="notion-block p-4 mb-4">
+                <h4 class="font-semibold mb-2 text-gray-700">Add New Topic</h4>
+                <form
+                  id="add-topic-form"
+                  class="flex flex-col sm:flex-row gap-2"
+                >
+                  <input
+                    type="text"
+                    id="new-topic-title"
+                    placeholder="Enter topic title..."
+                    class="flex-grow p-2 border bg-gray-50 rounded-md text-sm"
+                  />
+                  <select
+                    id="new-topic-category"
+                    class="p-2 border bg-gray-50 rounded-md text-sm"
+                  ></select>
+                  <button
+                    type="submit"
+                    class="py-2 px-4 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 text-sm"
+                  >
+                    Add Topic
+                  </button>
+                </form>
+              </div>
+              <div
+                id="topic-filters-container"
+                class="flex flex-wrap gap-2 mb-4"
+              ></div>
+              <div
+                id="topic-container"
+                class="grid grid-cols-1 md:grid-cols-2 gap-4"
+              ></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="strategies" class="content-section">
+          <h2 class="text-3xl font-semibold mb-6">
+            Crucial Success Strategies
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="callout-block callout-default">
+              <span class="icon">🥗</span>
+              <p>
+                <strong>Meal Prep is Mandatory:</strong> Cook on Sunday to save
+                critical time and mental energy during the week.
+              </p>
+            </div>
+            <div class="callout-block callout-danger">
+              <span class="icon">😴</span>
+              <p>
+                <strong>Protect Your Sleep:</strong> The 5-hour weekday sleep is
+                a risk. Recover on weekends. Prioritize sleep if you feel sick.
+              </p>
+            </div>
+            <div class="callout-block callout-default">
+              <span class="icon">📵</span>
+              <p>
+                <strong>Eliminate Distractions:</strong> Phone off and away
+                during study blocks. Every minute of focus is crucial.
+              </p>
+            </div>
+            <div class="callout-block callout-default">
+              <span class="icon">🧘</span>
+              <p>
+                <strong>Be Honest With Yourself:</strong> This schedule is
+                extreme. Use weekends to catch up if needed. Consistency over
+                perfection.
+              </p>
+            </div>
+            <div class="callout-block callout-default">
+              <span class="icon">🔄</span>
+              <p>
+                <strong>Consider Alternatives:</strong> A more sustainable plan
+                (e.g., 6h weekday, 11h weekend) still averages 8h/day with more
+                recovery.
+              </p>
+            </div>
+            <div class="callout-block callout-default">
+              <span class="icon">🍅</span>
+              <p>
+                <strong>Use Timers:</strong> Use a technique like Pomodoro to
+                maintain focus during long blocks and prevent mental fatigue.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const API_URL = "http://localhost:5001/api";
+        const errorModal = document.getElementById("error-modal");
+        const closeModalBtn = document.getElementById("close-error-modal-btn");
+        let isModalShown = false;
+
+        const editScheduleModal = document.getElementById(
+          "edit-schedule-modal"
+        );
+        const cancelEditBtn = document.getElementById("cancel-edit-btn");
+        const saveScheduleBtn = document.getElementById("save-schedule-btn");
+
+        const manageCategoriesModal = document.getElementById(
+          "manage-categories-modal"
+        );
+        const manageCategoriesBtn = document.getElementById(
+          "manage-categories-btn"
+        );
+        const closeCategoriesBtn = document.getElementById(
+          "close-categories-btn"
+        );
+        const addCategoryForm = document.getElementById("add-category-form");
+
+        let categories = [];
+        let topics = [];
+        let schedules = { weekday: [], weekend: [] };
+        let studyChart;
+
+        function renderSchedules() {
+          const weekdayContainer = document.getElementById(
+            "weekday-schedule-container"
+          );
+          const weekendContainer = document.getElementById(
+            "weekend-schedule-container"
+          );
+          weekdayContainer.innerHTML = "";
+          weekendContainer.innerHTML = "";
+
+          schedules.weekday.forEach((item) => {
+            weekdayContainer.innerHTML += createScheduleBlockHTML(item);
+          });
+          schedules.weekend.forEach((item) => {
+            weekendContainer.innerHTML += createScheduleBlockHTML(item);
+          });
+        }
+
+        function createScheduleBlockHTML(item) {
+          let descriptionClass = "text-sm text-gray-600";
+          if (item.isWarning)
+            descriptionClass = "text-sm font-bold text-red-600";
+          if (item.isSuccess)
+            descriptionClass = "text-sm font-bold text-green-600";
+          return `
+                    <div class="time-block ${item.category}-border pl-3">
+                        <p class="font-medium">${item.time}</p>
+                        <p class="${descriptionClass}">${item.description}</p>
+                    </div>`;
+        }
+
+        function openEditModal(scheduleType) {
+          const formContainer = document.getElementById(
+            "edit-schedule-form-container"
+          );
+          const title = document.getElementById("edit-modal-title");
+          title.textContent = `Edit ${
+            scheduleType.charAt(0).toUpperCase() + scheduleType.slice(1)
+          } Schedule`;
+          formContainer.innerHTML = "";
+
+          schedules[scheduleType].forEach((item, index) => {
+            const formRow = `
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
+                            <input type="text" value="${item.time}" class="sm:col-span-1 p-2 border bg-gray-50 rounded-md text-sm" data-index="${index}" data-field="time">
+                            <input type="text" value="${item.description}" class="sm:col-span-2 p-2 border bg-gray-50 rounded-md text-sm" data-index="${index}" data-field="description">
+                        </div>
+                    `;
+            formContainer.innerHTML += formRow;
+          });
+          saveScheduleBtn.dataset.scheduleType = scheduleType;
+          editScheduleModal.classList.remove("hidden");
+        }
+
+        document.querySelectorAll(".edit-schedule-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            openEditModal(e.target.dataset.schedule);
+          });
+        });
+
+        cancelEditBtn.addEventListener("click", () =>
+          editScheduleModal.classList.add("hidden")
+        );
+
+        saveScheduleBtn.addEventListener("click", async () => {
+          const scheduleType = saveScheduleBtn.dataset.scheduleType;
+          const timeInputs = document.querySelectorAll(
+            `#edit-schedule-form-container input[data-field="time"]`
+          );
+          const descInputs = document.querySelectorAll(
+            `#edit-schedule-form-container input[data-field="description"]`
+          );
+
+          const updatedSchedule = schedules[scheduleType].map(
+            (item, index) => ({
+              ...item,
+              time: timeInputs[index].value,
+              description: descInputs[index].value,
+            })
+          );
+
+          await fetch(`${API_URL}/schedules/${scheduleType}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedSchedule),
+          });
+
+          await fetchAndRenderSchedules();
+          editScheduleModal.classList.add("hidden");
+        });
+
+        function showErrorModal() {
+          if (isModalShown) return;
+          errorModal.classList.remove("hidden");
+          isModalShown = true;
+        }
+
+        closeModalBtn.addEventListener("click", () => {
+          errorModal.classList.add("hidden");
+        });
+
+        const navLinks = document.querySelectorAll(".nav-link");
+        const contentSections = document.querySelectorAll(".content-section");
+
+        navLinks.forEach((link) => {
+          link.addEventListener("click", () => {
+            const targetId = link.dataset.target;
+            navLinks.forEach((navLink) => navLink.classList.remove("active"));
+            link.classList.add("active");
+            contentSections.forEach((section) => {
+              section.classList.remove("active");
+              if (section.id === targetId) {
+                section.classList.add("active");
+              }
+            });
+          });
+        });
+
+        function renderChecklist(tasks) {
+          const container = document.getElementById("checklist-container");
+          container.innerHTML = "";
+          if (!tasks || tasks.length === 0) {
+            container.innerHTML =
+              '<p class="text-gray-500 text-center p-4">No tasks found.</p>';
+            return;
+          }
+          tasks
+            .sort((a, b) => a.text.localeCompare(b.text))
+            .forEach((task) => {
+              const item = document.createElement("div");
+              item.className = "checklist-item";
+              const isCompleted = task.completed ? "checked" : "";
+              const labelClass = task.completed ? "completed" : "";
+              item.innerHTML = `
+                        <input type="checkbox" id="${task._id}" data-id="${task._id}" ${isCompleted} class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <label for="${task._id}" class="${labelClass} flex-1 cursor-pointer">${task.text}</label>
+                        <button class="delete-btn delete-checklist-item" data-id="${task._id}">&times;</button>
+                    `;
+              container.appendChild(item);
+            });
+        }
+
+        function renderTopics(filteredTopics) {
+          const container = document.getElementById("topic-container");
+          container.innerHTML = "";
+          if (!filteredTopics || filteredTopics.length === 0) {
+            container.innerHTML =
+              '<p class="text-gray-500 text-center p-4 md:col-span-2">No topics found for this subject.</p>';
+            return;
+          }
+          filteredTopics
+            .sort((a, b) => a.title.localeCompare(b.title))
+            .forEach((topic) => {
+              const card = document.createElement("div");
+              card.className = `topic-card notion-block p-4 flex justify-between items-center`;
+              card.dataset.category = topic.category;
+
+              const statusClasses = {
+                "Not Started": "status-not-started",
+                "In Progress": "status-in-progress",
+                Completed: "status-completed",
+              };
+
+              card.innerHTML = `
+                        <div class="flex-grow mr-4">
+                            <p class="font-semibold">${topic.title}</p>
+                            <p class="text-xs uppercase font-bold text-gray-400">${
+                              topic.category
+                            }</p>
+                        </div>
+                        <div class="flex items-center">
+                            <select class="status-select ${
+                              statusClasses[topic.status]
+                            }" data-id="${topic._id}">
+                                <option value="Not Started" ${
+                                  topic.status === "Not Started"
+                                    ? "selected"
+                                    : ""
+                                }>Not Started</option>
+                                <option value="In Progress" ${
+                                  topic.status === "In Progress"
+                                    ? "selected"
+                                    : ""
+                                }>In Progress</option>
+                                <option value="Completed" ${
+                                  topic.status === "Completed" ? "selected" : ""
+                                }>Completed</option>
+                            </select>
+                            <button class="delete-btn delete-topic-item ml-2" data-id="${
+                              topic._id
+                            }">&times;</button>
+                        </div>
+                    `;
+              container.appendChild(card);
+            });
+        }
+
+        async function fetchAndRenderTopics() {
+          try {
+            const response = await fetch(`${API_URL}/topics`);
+            if (!response.ok) throw new Error("Network response was not ok");
+            topics = await response.json();
+            updateChart();
+            filterTopics();
+          } catch (error) {
+            console.error("Failed to fetch topics:", error);
+            document.getElementById("topic-container").innerHTML =
+              '<p class="text-red-500 text-center p-4 md:col-span-2">Error loading topics.</p>';
+            if (!isModalShown) showErrorModal();
+          }
+        }
+
+        async function fetchAndRenderChecklist() {
+          try {
+            const response = await fetch(`${API_URL}/checklist`);
+            if (!response.ok) throw new Error("Network response was not ok");
+            const tasks = await response.json();
+            renderChecklist(tasks);
+          } catch (error) {
+            console.error("Failed to fetch checklist:", error);
+            document.getElementById("checklist-container").innerHTML =
+              '<p class="text-red-500 text-center p-4">Error loading tasks.</p>';
+            if (!isModalShown) showErrorModal();
+          }
+        }
+
+        async function fetchAndRenderCategories() {
+          try {
+            const response = await fetch(`${API_URL}/categories`);
+            if (!response.ok) throw new Error("Network response was not ok");
+            categories = await response.json();
+            updateCategoryUIElements();
+          } catch (error) {
+            console.error("Failed to fetch categories:", error);
+            if (!isModalShown) showErrorModal();
+          }
+        }
+
+        async function fetchAndRenderSchedules() {
+          try {
+            const weekdayRes = await fetch(`${API_URL}/schedules/weekday`);
+            if (!weekdayRes.ok)
+              throw new Error("Weekday schedule fetch failed");
+            const weekdayData = await weekdayRes.json();
+            schedules.weekday = [
+              ...new Map(
+                weekdayData.map((item) => [item.description, item])
+              ).values(),
+            ];
+
+            const weekendRes = await fetch(`${API_URL}/schedules/weekend`);
+            if (!weekendRes.ok)
+              throw new Error("Weekend schedule fetch failed");
+            const weekendData = await weekendRes.json();
+            schedules.weekend = [
+              ...new Map(
+                weekendData.map((item) => [item.description, item])
+              ).values(),
+            ];
+
+            renderSchedules();
+          } catch (error) {
+            console.error("Failed to fetch schedules:", error);
+            document.getElementById("weekday-schedule-container").innerHTML =
+              '<p class="text-red-500 text-center p-4">Error loading schedule.</p>';
+            document.getElementById("weekend-schedule-container").innerHTML =
+              '<p class="text-red-500 text-center p-4">Error loading schedule.</p>';
+            if (!isModalShown) showErrorModal();
+          }
+        }
+
+        function updateCategoryUIElements() {
+          const categorySelect = document.getElementById("new-topic-category");
+          const filtersContainer = document.getElementById(
+            "topic-filters-container"
+          );
+          const categoryListContainer = document.getElementById(
+            "category-list-container"
+          );
+
+          categorySelect.innerHTML = "";
+          filtersContainer.innerHTML =
+            '<button class="topic-filter-btn active py-1 px-3 bg-gray-200 rounded-md text-sm" data-filter="all">All</button>';
+          categoryListContainer.innerHTML = "";
+
+          categories.forEach((cat) => {
+            categorySelect.innerHTML += `<option value="${cat.name}">${cat.name}</option>`;
+            filtersContainer.innerHTML += `<button class="topic-filter-btn py-1 px-3 bg-gray-100 hover:bg-gray-200 rounded-md text-sm" data-filter="${cat.name}">${cat.name}</button>`;
+            categoryListContainer.innerHTML += `
+                        <div class="category-item flex justify-between items-center p-2 rounded hover:bg-gray-100">
+                            <span>${cat.name}</span>
+                            <button class="delete-btn delete-category-item" data-id="${cat._id}">&times;</button>
+                        </div>
+                    `;
+          });
+
+          document.querySelectorAll(".topic-filter-btn").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              document.querySelectorAll(".topic-filter-btn").forEach((b) => {
+                b.classList.remove("active", "bg-gray-200");
+                b.classList.add("bg-gray-100");
+              });
+              e.target.classList.add("active", "bg-gray-200");
+              e.target.classList.remove("bg-gray-100");
+              filterTopics();
+            });
+          });
+        }
+
+        function filterTopics() {
+          const currentFilter =
+            document.querySelector(".topic-filter-btn.active")?.dataset
+              .filter || "all";
+          const filtered =
+            currentFilter === "all"
+              ? topics
+              : topics.filter((t) => t.category === currentFilter);
+          renderTopics(filtered);
+        }
+
+        function updateChart() {
+          const categoryCounts = categories.reduce((acc, cat) => {
+            acc[cat.name] = 0;
+            return acc;
+          }, {});
+
+          topics.forEach((topic) => {
+            if (categoryCounts.hasOwnProperty(topic.category)) {
+              categoryCounts[topic.category]++;
+            }
+          });
+
+          const labels = Object.keys(categoryCounts);
+          const data = Object.values(categoryCounts);
+
+          studyChart.data.labels = labels;
+          studyChart.data.datasets[0].data = data;
+          studyChart.update();
+        }
+
+        document
+          .getElementById("tracker")
+          .addEventListener("click", async (e) => {
+            if (
+              e.target &&
+              e.target.classList.contains("delete-checklist-item")
+            ) {
+              const docId = e.target.dataset.id;
+              await fetch(`${API_URL}/checklist/${docId}`, {
+                method: "DELETE",
+              });
+              fetchAndRenderChecklist();
+            }
+            if (e.target && e.target.classList.contains("delete-topic-item")) {
+              const docId = e.target.dataset.id;
+              await fetch(`${API_URL}/topics/${docId}`, { method: "DELETE" });
+              fetchAndRenderTopics();
+            }
+          });
+
+        document
+          .getElementById("tracker")
+          .addEventListener("change", async (e) => {
+            if (e.target && e.target.matches('input[type="checkbox"]')) {
+              const docId = e.target.dataset.id;
+              const label = document.querySelector(
+                `label[for='${e.target.id}']`
+              );
+              if (label) {
+                label.classList.toggle("completed", e.target.checked);
+              }
+              await fetch(`${API_URL}/checklist/${docId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ completed: e.target.checked }),
+              });
+            }
+            if (e.target && e.target.classList.contains("status-select")) {
+              const docId = e.target.dataset.id;
+              const newStatus = e.target.value;
+              await fetch(`${API_URL}/topics/${docId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: newStatus }),
+              });
+              e.target.className = `status-select ${
+                {
+                  "Not Started": "status-not-started",
+                  "In Progress": "status-in-progress",
+                  Completed: "status-completed",
+                }[newStatus]
+              }`;
+            }
+          });
+
+        addCategoryForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const input = document.getElementById("new-category-name");
+          const name = input.value.trim();
+          if (name === "") return;
+
+          await fetch(`${API_URL}/categories`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          input.value = "";
+          await fetchAndRenderCategories();
+          await fetchAndRenderTopics();
+        });
+
+        document
+          .getElementById("category-list-container")
+          .addEventListener("click", async (e) => {
+            if (
+              e.target &&
+              e.target.classList.contains("delete-category-item")
+            ) {
+              const docId = e.target.dataset.id;
+              await fetch(`${API_URL}/categories/${docId}`, {
+                method: "DELETE",
+              });
+              await fetchAndRenderCategories();
+              await fetchAndRenderTopics();
+            }
+          });
+
+        document
+          .getElementById("add-topic-form")
+          .addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const titleInput = document.getElementById("new-topic-title");
+            const categorySelect =
+              document.getElementById("new-topic-category");
+            const title = titleInput.value.trim();
+            if (title === "" || !categorySelect.value) return;
+
+            const newTopic = {
+              title,
+              category: categorySelect.value,
+              status: "Not Started",
+            };
+
+            await fetch(`${API_URL}/topics`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(newTopic),
+            });
+            titleInput.value = "";
+            fetchAndRenderTopics();
+          });
+
+        document
+          .getElementById("reset-checklist")
+          .addEventListener("click", async () => {
+            await fetch(`${API_URL}/checklist/reset`, { method: "POST" });
+            fetchAndRenderChecklist();
+          });
+
+        manageCategoriesBtn.addEventListener("click", () =>
+          manageCategoriesModal.classList.remove("hidden")
+        );
+        closeCategoriesBtn.addEventListener("click", () =>
+          manageCategoriesModal.classList.add("hidden")
+        );
+
+        const chartConfig = {
+          type: "doughnut",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Topics per Subject",
+                data: [],
+                backgroundColor: [
+                  "#F59E0B",
+                  "#3B82F6",
+                  "#10B981",
+                  "#6366F1",
+                  "#EC4899",
+                  "#8B5CF6",
+                ],
+                borderColor: "#F7F7F5",
+                borderWidth: 4,
+                hoverOffset: 8,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  padding: 20,
+                  font: { size: 14, family: "Inter" },
+                  color: "#37352F",
+                },
+              },
+              tooltip: {
+                callbacks: { label: (c) => `${c.label}: ${c.parsed} topics` },
+                titleFont: { size: 16, family: "Inter" },
+                bodyFont: { size: 14, family: "Inter" },
+                backgroundColor: "#FFFFFF",
+                titleColor: "#37352F",
+                bodyColor: "#37352F",
+                borderColor: "#E2E2DF",
+                borderWidth: 1,
+              },
+            },
+            cutout: "65%",
+          },
+        };
+
+        const ctx = document.getElementById("studyHoursChart").getContext("2d");
+        studyChart = new Chart(ctx, chartConfig);
+
+        async function initializeApp() {
+          // Load data sequentially to prevent race conditions and isolate errors
+          await fetchAndRenderSchedules();
+          await fetchAndRenderCategories();
+          await fetchAndRenderTopics();
+          await fetchAndRenderChecklist();
+        }
+
+        initializeApp();
+      });
+    </script>
+  </body>
+</html>

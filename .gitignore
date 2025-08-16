@@ -1,0 +1,11 @@
+# Dependencies
+node_modules
+
+# Environment variables
+.env
+
+# Optional: VS Code specific files
+.vscode/
+
+# Optional: macOS specific files
+.DS_Store
